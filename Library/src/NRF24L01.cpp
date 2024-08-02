@@ -89,16 +89,16 @@ void NRF24_TxMode(uint8_t *address, uint8_t channel){
 uint8_t NRF24_Transmit (uint8_t *data){
     uint8_t cmdtosend = 0;
     CS_select();
-
     cmdtosend = W_TX_PAYLOAD;
     SPI.transfer(cmdtosend);
-    SPI.transfer(data, 31);
+    SPI.transfer(data, 32);
     CS_unselect();
-
     delay(1);
-    uint8_t fifostatus = nrf24_ReadReg(FIFO_STATUS);
 
-    if ((fifostatus&(1<<4)) && (fifostatus & (1<<3))){
+    uint8_t fifostatus = nrf24_ReadReg(FIFO_STATUS);
+    Serial.println(fifostatus);
+
+    if ((fifostatus&(1<<4)) && !(fifostatus & (1<<3))){
         cmdtosend = FLUSH_TX;
         nrfsendcmd(cmdtosend);
 
@@ -106,4 +106,45 @@ uint8_t NRF24_Transmit (uint8_t *data){
     }
 
     return 0;
+}
+
+void NRF24_RxMode(uint8_t *address, uint8_t channel){
+    CE_disable();
+
+    nrf24_WriteReg(RF_CH, channel);
+    uint8_t en_rxaddr = nrf24_ReadReg(EN_RXADDR);
+    en_rxaddr |= (1<<1);
+    nrf24_WriteReg(EN_RXADDR, en_rxaddr);
+    nrf24_WriteRegMulti(RX_ADDR_P1, address, 5);
+
+    nrf24_WriteReg(RX_PW_P1, 32);
+    
+    uint8_t config = nrf24_ReadReg(CONFIG);
+    config |= (1<<1);
+    config |= (1);
+    nrf24_WriteReg(CONFIG, config);
+
+    CE_enable();
+}
+
+uint8_t isDataAvailable (int pipenum){
+    uint8_t status = nrf24_ReadReg(STATUS);
+    if (status&(1<<6) && (status&(pipenum<<1))){
+        nrf24_WriteReg(STATUS, (1<<6));
+        return 1;
+    }
+    return 0;
+}
+
+void NRF24_Receive(uint8_t *data){
+    uint8_t cmdtosend = 0;
+    CS_select();
+    cmdtosend = R_RX_PAYLOAD;
+    SPI.transfer(cmdtosend);
+    SPI.transfer(data, 32);
+    CS_unselect();
+    delay(1);
+
+    cmdtosend = FLUSH_RX;
+    nrfsendcmd(cmdtosend);
 }
